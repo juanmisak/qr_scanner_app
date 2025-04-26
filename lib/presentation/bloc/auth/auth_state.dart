@@ -1,65 +1,67 @@
 part of 'auth_bloc.dart'; // Usa 'part of' para vincular con auth_bloc.dart
 
 abstract class AuthState extends Equatable {
-  const AuthState();
+  final bool? isPinSet;
+  final bool? isBiometricAvailable;
 
-  @override
-  List<Object?> get props => [];
-}
-
-// Estado inicial, antes de verificar nada
-class AuthInitial extends AuthState {}
-
-// Estado mientras se verifica el estado inicial o se procesa una autenticación
-class AuthLoading extends AuthState {
-  final bool isPinSet;
-  const AuthLoading({required this.isPinSet});
-  @override
-  List<Object?> get props => [isPinSet];
-}
-
-// Estado después de la verificación inicial
-class AuthStatusKnown extends AuthState {
-  final bool isPinSet;
-  final bool isBiometricAvailable; // Lo añadiremos luego
-
-  const AuthStatusKnown({
-    required this.isPinSet,
-    this.isBiometricAvailable = false,
-  });
+  const AuthState({this.isPinSet, this.isBiometricAvailable});
 
   @override
   List<Object?> get props => [isPinSet, isBiometricAvailable];
 }
 
+// Estado inicial, antes de verificar nada
+class AuthInitial extends AuthState {
+  const AuthInitial() : super(isPinSet: null, isBiometricAvailable: null);
+}
+
+// Cargando, pero sabemos el estado previo
+class AuthLoading extends AuthState {
+  const AuthLoading({
+    required bool isPinSet,
+    required bool isBiometricAvailable,
+  }) : super(isPinSet: isPinSet, isBiometricAvailable: isBiometricAvailable);
+}
+
+// Estado conocido después de la verificación inicial
+class AuthStatusKnown extends AuthState {
+  const AuthStatusKnown({
+    required bool isPinSet,
+    required bool isBiometricAvailable,
+  }) : super(isPinSet: isPinSet, isBiometricAvailable: isBiometricAvailable);
+}
+
 // Estado para indicar que se debe mostrar el BottomSheet del PIN
 class AuthShowPinSheet extends AuthState {
-  final bool isCreatingPin; // true si no hay PIN, false si ya existe uno
-  final bool isPinSet;
+  final bool isCreatingPin;
 
-  const AuthShowPinSheet({required this.isCreatingPin, required this.isPinSet});
-  @override
-  List<Object?> get props => [isCreatingPin, isPinSet];
+  const AuthShowPinSheet({
+    required this.isCreatingPin,
+    required bool isPinSet,
+    required bool isBiometricAvailable,
+  }) : super(isPinSet: isPinSet, isBiometricAvailable: isBiometricAvailable);
 }
 
-// Estado cuando la autenticación (PIN o Biometría) fue exitosa
-class AuthAuthenticated extends AuthState {}
+class AuthAuthenticated extends AuthState {
+  const AuthAuthenticated() : super(isPinSet: null, isBiometricAvailable: null);
+}
 
-// Estado cuando ocurrió un error durante la autenticación o verificación
 class AuthFailure extends AuthState {
   final String message;
-  final bool isPinSet;
-  const AuthFailure(this.message, {required this.isPinSet});
+  const AuthFailure(
+    this.message, {
+    required bool isPinSet,
+    required bool isBiometricAvailable,
+  }) : super(isPinSet: isPinSet, isBiometricAvailable: isBiometricAvailable);
+
   @override
-  List<Object?> get props => [message, isPinSet];
+  List<Object?> get props => [isPinSet, isBiometricAvailable, message];
 }
 
-// Estado cuando el PIN introducido es incorrecto
+// PIN Incorrecto, necesitamos saber el estado de fondo
 class AuthPinIncorrect extends AuthState {
-  final bool isPinSet;
-  const AuthPinIncorrect({required this.isPinSet});
-  @override
-  List<Object?> get props => [isPinSet];
+  const AuthPinIncorrect({
+    required bool isPinSet,
+    required bool isBiometricAvailable,
+  }) : super(isPinSet: isPinSet, isBiometricAvailable: isBiometricAvailable);
 }
-
-// TODO: Añadir estados para flujo de biometría (ej. AuthBiometricNotAvailable)

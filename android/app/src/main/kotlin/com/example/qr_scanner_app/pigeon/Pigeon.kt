@@ -34,6 +34,36 @@ private object PigeonPigeonUtils {
       )
     }
   }
+  fun deepEquals(a: Any?, b: Any?): Boolean {
+    if (a is ByteArray && b is ByteArray) {
+        return a.contentEquals(b)
+    }
+    if (a is IntArray && b is IntArray) {
+        return a.contentEquals(b)
+    }
+    if (a is LongArray && b is LongArray) {
+        return a.contentEquals(b)
+    }
+    if (a is DoubleArray && b is DoubleArray) {
+        return a.contentEquals(b)
+    }
+    if (a is Array<*> && b is Array<*>) {
+      return a.size == b.size &&
+          a.indices.all{ deepEquals(a[it], b[it]) }
+    }
+    if (a is List<*> && b is List<*>) {
+      return a.size == b.size &&
+          a.indices.all{ deepEquals(a[it], b[it]) }
+    }
+    if (a is Map<*, *> && b is Map<*, *>) {
+      return a.size == b.size && a.all {
+          (b as Map<Any?, Any?>).containsKey(it.key) &&
+          deepEquals(it.value, b[it.key])
+      }
+    }
+    return a == b
+  }
+      
 }
 
 /**
@@ -47,16 +77,144 @@ class FlutterError (
   override val message: String? = null,
   val details: Any? = null
 ) : Throwable()
+
+enum class BiometricAuthStatus(val raw: Int) {
+  SUCCESS(0),
+  FAILURE(1),
+  ERROR_HW_UNAVAILABLE(2),
+  ERROR_NO_BIOMETRICS(3),
+  ERROR_NO_DEVICE_CREDENTIAL(4),
+  ERROR_SECURITY_UPDATE_REQUIRED(5),
+  ERROR_USER_CANCELED(6),
+  ERROR_TIMEOUT(7),
+  ERROR_LOCKOUT(8),
+  ERROR_LOCKOUT_PERMANENT(9),
+  ERROR_UNKNOWN(10);
+
+  companion object {
+    fun ofRaw(raw: Int): BiometricAuthStatus? {
+      return values().firstOrNull { it.raw == raw }
+    }
+  }
+}
+
+/** Generated class from Pigeon that represents data sent in messages. */
+data class BiometricResult (
+  val status: BiometricAuthStatus,
+  val errorMessage: String? = null
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): BiometricResult {
+      val status = pigeonVar_list[0] as BiometricAuthStatus
+      val errorMessage = pigeonVar_list[1] as String?
+      return BiometricResult(status, errorMessage)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      status,
+      errorMessage,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other !is BiometricResult) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    return PigeonPigeonUtils.deepEquals(toList(), other.toList())  }
+
+  override fun hashCode(): Int = toList().hashCode()
+}
 private open class PigeonPigeonCodec : StandardMessageCodec() {
   override fun readValueOfType(type: Byte, buffer: ByteBuffer): Any? {
-    return     super.readValueOfType(type, buffer)
+    return when (type) {
+      129.toByte() -> {
+        return (readValue(buffer) as Long?)?.let {
+          BiometricAuthStatus.ofRaw(it.toInt())
+        }
+      }
+      130.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          BiometricResult.fromList(it)
+        }
+      }
+      else -> super.readValueOfType(type, buffer)
+    }
   }
   override fun writeValue(stream: ByteArrayOutputStream, value: Any?)   {
-    super.writeValue(stream, value)
+    when (value) {
+      is BiometricAuthStatus -> {
+        stream.write(129)
+        writeValue(stream, value.raw)
+      }
+      is BiometricResult -> {
+        stream.write(130)
+        writeValue(stream, value.toList())
+      }
+      else -> super.writeValue(stream, value)
+    }
   }
 }
 
 
+/** Generated interface from Pigeon that represents a handler of messages from Flutter. */
+interface BiometricApi {
+  fun isBiometricSupported(callback: (Result<Boolean>) -> Unit)
+  fun authenticate(reason: String, callback: (Result<BiometricResult>) -> Unit)
+
+  companion object {
+    /** The codec used by BiometricApi. */
+    val codec: MessageCodec<Any?> by lazy {
+      PigeonPigeonCodec()
+    }
+    /** Sets up an instance of `BiometricApi` to handle messages through the `binaryMessenger`. */
+    @JvmOverloads
+    fun setUp(binaryMessenger: BinaryMessenger, api: BiometricApi?, messageChannelSuffix: String = "") {
+      val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.com.example.qr_scanner_app.BiometricApi.isBiometricSupported$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            api.isBiometricSupported{ result: Result<Boolean> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(PigeonPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(PigeonPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.com.example.qr_scanner_app.BiometricApi.authenticate$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val reasonArg = args[0] as String
+            api.authenticate(reasonArg) { result: Result<BiometricResult> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(PigeonPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(PigeonPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+    }
+  }
+}
 /** Generated interface from Pigeon that represents a handler of messages from Flutter. */
 interface SecureStorageApi {
   fun write(key: String, value: String, callback: (Result<Unit>) -> Unit)

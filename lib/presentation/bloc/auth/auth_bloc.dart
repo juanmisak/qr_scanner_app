@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'package:bloc/bloc.dart';
-import 'package:dartz/dartz.dart';
+import 'package:qr_scanner_app/core/error/failures.dart';
 import 'package:equatable/equatable.dart';
 import 'package:qr_scanner_app/core/usecase/usecase.dart';
 import 'package:qr_scanner_app/domain/usecases/auth/check_pin_exists.dart';
 import 'package:qr_scanner_app/domain/usecases/auth/save_pin.dart';
 import 'package:qr_scanner_app/domain/usecases/auth/verify_pin.dart';
+import 'package:qr_scanner_app/domain/usecases/auth/check_biometric_support.dart';
+import 'package:qr_scanner_app/pigeon/messages.dart';
+import 'package:qr_scanner_app/domain/usecases/auth/authenticate_with_biometrics.dart';
 
 part 'auth_event.dart';
 part 'auth_state.dart';
@@ -14,13 +17,17 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final CheckPinExists checkPinExists;
   final SavePin savePin;
   final VerifyPin verifyPin;
-
+  final CheckBiometricSupport checkBiometricSupport;
+  final AuthenticateWithBiometrics authenticateWithBiometrics;
   bool _currentPinIsSet = false;
+  bool _currentBiometricSupported = false;
 
   AuthBloc({
     required this.checkPinExists,
     required this.savePin,
     required this.verifyPin,
+    required this.checkBiometricSupport,
+    required this.authenticateWithBiometrics,
   }) : super(AuthInitial()) {
     on<AuthStatusChecked>(_onAuthStatusChecked);
     on<PinAuthRequested>(_onPinAuthRequested);
@@ -33,21 +40,150 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     AuthStatusChecked event,
     Emitter<AuthState> emit,
   ) async {
-    emit(AuthLoading(isPinSet: _currentPinIsSet));
-    final pinExistsResult = await checkPinExists(NoParams());
+    emit(
+      AuthLoading(
+        isPinSet: _currentPinIsSet,
+        isBiometricAvailable: _currentBiometricSupported,
+      ),
+    );
+    final pinExistsFuture = checkPinExists(NoParams());
+    final biometricSupportFuture = checkBiometricSupport(NoParams());
+
+    final results = await Future.wait([
+      pinExistsFuture,
+      biometricSupportFuture,
+    ]);
+
+    final pinExistsResult = results[0];
+    final biometricSupportResult = results[1];
+
+    Failure? checkFailure;
+    // Usa los valores internos como fallback en caso de error en la comprobación
+    bool finalPinExists = _currentPinIsSet;
+    bool finalBiometricSupported = _currentBiometricSupported;
 
     pinExistsResult.fold(
-      (failure) =>
-          emit(AuthFailure(failure.message, isPinSet: _currentPinIsSet)),
-      (pinExists) {
-        _currentPinIsSet = pinExists;
+      (failure) => checkFailure ??= failure,
+      (pinExists) => finalPinExists = pinExists,
+    );
+    biometricSupportResult.fold(
+      (failure) => checkFailure ??= failure,
+      (supported) =>
+          finalBiometricSupported = supported, // <-- Guarda el resultado
+    );
+
+    if (checkFailure != null) {
+      emit(
+        AuthFailure(
+          checkFailure!.message,
+          isPinSet: finalPinExists,
+          isBiometricAvailable: finalBiometricSupported,
+        ),
+      );
+    } else {
+      _currentPinIsSet = finalPinExists;
+      _currentBiometricSupported = finalBiometricSupported;
+      emit(
+        AuthStatusKnown(
+          isPinSet: _currentPinIsSet,
+          isBiometricAvailable: _currentBiometricSupported,
+        ),
+      );
+    }
+  }
+  // Dentro de la clase AuthBloc
+
+  Future<void> _onBiometricAuthRequested(
+    BiometricAuthRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(
+      AuthLoading(
+        isPinSet: _currentPinIsSet,
+        isBiometricAvailable: _currentBiometricSupported,
+      ),
+    );
+
+    final result = await authenticateWithBiometrics(
+      const AuthenticateWithBiometricsParams(
+        reason: "Desbloquea para continuar",
+      ),
+    );
+
+    result.fold(
+      (failure) {
+        //<- Caso de error en la llamada (Pigeon/Repo)
         emit(
-          AuthStatusKnown(
-            isPinSet: _currentPinIsSet /* isBiometricAvailable: ... */,
+          AuthFailure(
+            failure.message,
+            isPinSet: _currentPinIsSet,
+            isBiometricAvailable: _currentBiometricSupported,
           ),
         );
+        _scheduleReturnToKnownState(emit);
+      },
+      (biometricResult) {
+        //<- Caso de éxito en la llamada (recibimos BiometricResult)
+        // AGREGAR LOG PARA VER EL STATUS RECIBIDO:
+        print(
+          "AuthBloc: Received BiometricResult with status: ${biometricResult.status}",
+        );
+
+        if (biometricResult.status == BiometricAuthStatus.success) {
+          print("AuthBloc: Biometric status is success.");
+          emit(const AuthAuthenticated());
+        } else if (biometricResult.status ==
+            BiometricAuthStatus.errorUserCanceled) {
+          // <-- ¿Está entrando aquí?
+          print(
+            "AuthBloc: Biometric status is errorUserCanceled. Showing PIN sheet.",
+          );
+          emit(
+            AuthShowPinSheet(
+              isCreatingPin: !_currentPinIsSet,
+              isPinSet: _currentPinIsSet,
+              isBiometricAvailable: _currentBiometricSupported,
+            ),
+          );
+        } else {
+          // <-- ¡ESTÁ ENTRANDO AQUÍ INCORRECTAMENTE!
+          final errorMessage =
+              biometricResult.errorMessage ??
+              "Falló la autenticación biométrica (${biometricResult.status.name})";
+          print(
+            "AuthBloc: Biometric status is other failure ($errorMessage). Emitting AuthFailure.",
+          ); // Este es el log que ves
+          emit(
+            AuthFailure(
+              errorMessage,
+              isPinSet: _currentPinIsSet,
+              isBiometricAvailable: _currentBiometricSupported,
+            ),
+          );
+          _scheduleReturnToKnownState(emit);
+        }
       },
     );
+  }
+
+  // Helper para volver al estado conocido después de un fallo temporal (NO usar para cancelación)
+  void _scheduleReturnToKnownState(Emitter<AuthState> emit) {
+    Future.delayed(const Duration(seconds: 2), () {
+      // Solo vuelve si AÚN estamos en un estado de fallo relevante
+      final currentState = state; // Captura el estado actual
+      if (!emit.isDone &&
+          (currentState is AuthFailure ||
+              currentState
+                  is AuthLoading /*u otros estados temporales si los hubiera*/ )) {
+        ("Volviendo a AuthStatusKnown desde $currentState");
+        emit(
+          AuthStatusKnown(
+            isPinSet: _currentPinIsSet,
+            isBiometricAvailable: _currentBiometricSupported,
+          ),
+        );
+      }
+    });
   }
 
   void _onPinAuthRequested(PinAuthRequested event, Emitter<AuthState> emit) {
@@ -55,6 +191,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       AuthShowPinSheet(
         isCreatingPin: !_currentPinIsSet,
         isPinSet: _currentPinIsSet,
+        isBiometricAvailable: _currentBiometricSupported,
       ),
     );
   }
@@ -63,41 +200,43 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     PinSubmitted event,
     Emitter<AuthState> emit,
   ) async {
-    emit(AuthLoading(isPinSet: _currentPinIsSet));
-
+    emit(
+      AuthLoading(
+        isPinSet: _currentPinIsSet,
+        isBiometricAvailable: _currentBiometricSupported,
+      ),
+    ); // Pasa el estado actual
+    // ... (resto de la lógica de _onPinSubmitted, asegurándose de pasar isPinSet a AuthFailure y AuthPinIncorrect) ...
     if (_currentPinIsSet) {
       // --- Verificar PIN existente ---
       final result = await verifyPin(VerifyPinParams(pin: event.pin));
-      // 'await' aquí asegura que esperamos el resultado de la verificación
       result.fold(
-        (failure) =>
-            emit(AuthFailure(failure.message, isPinSet: _currentPinIsSet)),
-        // Este callback (lambda) también debe ser 'async' si usa 'await' adentro
+        (failure) => emit(
+          AuthFailure(
+            failure.message,
+            isPinSet: _currentPinIsSet,
+            isBiometricAvailable: _currentBiometricSupported,
+          ),
+        ),
         (isCorrect) async {
-          // <-- MARCA ESTE LAMBDA COMO ASYNC
           if (isCorrect) {
             emit(AuthAuthenticated());
           } else {
-            // PIN Incorrecto
-            emit(AuthPinIncorrect(isPinSet: _currentPinIsSet));
-            // AHORA SÍ: Espera a que el retraso termine ANTES de continuar
-            await Future.delayed(
-              const Duration(milliseconds: 500),
-            ); // <-- AÑADE AWAIT AQUÍ
-
-            // Después del retraso, verifica si el estado sigue siendo el esperado (buena práctica)
-            // y luego emite el nuevo estado. Como hemos esperado, el manejador sigue activo.
-            if (!emit.isDone) {
-              // Es buena práctica comprobar si el emitter sigue activo
-              // Comprueba el estado actual por si acaso algo más lo cambió durante el delay
-              if (state is AuthPinIncorrect) {
-                emit(
-                  AuthShowPinSheet(
-                    isCreatingPin: false,
-                    isPinSet: _currentPinIsSet,
-                  ),
-                );
-              }
+            emit(
+              AuthPinIncorrect(
+                isPinSet: _currentPinIsSet,
+                isBiometricAvailable: _currentBiometricSupported,
+              ),
+            ); // Pasa isPinSet
+            await Future.delayed(const Duration(milliseconds: 500));
+            if (!emit.isDone && state is AuthPinIncorrect) {
+              emit(
+                AuthShowPinSheet(
+                  isCreatingPin: false,
+                  isPinSet: _currentPinIsSet,
+                  isBiometricAvailable: _currentBiometricSupported,
+                ),
+              );
             }
           }
         },
@@ -106,52 +245,33 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       // --- Crear nuevo PIN ---
       final result = await savePin(SavePinParams(pin: event.pin));
       result.fold(
-        (failure) =>
-            emit(AuthFailure(failure.message, isPinSet: _currentPinIsSet)),
+        (failure) => emit(
+          AuthFailure(
+            failure.message,
+            isPinSet: _currentPinIsSet,
+            isBiometricAvailable: _currentBiometricSupported,
+          ),
+        ),
         (_) {
-          _currentPinIsSet = true; // Actualiza el estado interno
-          // Podrías re-emitir AuthStatusKnown o directamente ir a AuthAuthenticated
-          // O quizás volver a la pantalla inicial para que el usuario inicie sesión
+          _currentPinIsSet = true;
+          // Vuelve al estado conocido, que ya incluye la info biométrica actualizada antes
           emit(
-            AuthStatusKnown(isPinSet: _currentPinIsSet),
-          ); // Vuelve al estado conocido
-          // Podrías mostrar un SnackBar indicando "PIN Creado" en la UI
+            AuthStatusKnown(
+              isPinSet: _currentPinIsSet,
+              isBiometricAvailable: _currentBiometricSupported,
+            ),
+          );
         },
       );
     }
   }
 
   void _onPinAuthCancelled(PinAuthCancelled event, Emitter<AuthState> emit) {
-    // Simplemente vuelve al estado conocido anterior
-    emit(AuthStatusKnown(isPinSet: _currentPinIsSet));
-  }
-
-  Future<void> _onBiometricAuthRequested(
-    BiometricAuthRequested event,
-    Emitter<AuthState> emit,
-  ) async {
-    emit(AuthLoading(isPinSet: _currentPinIsSet));
-    // TODO: Implementar llamada al UseCase de biometría
-    // final result = await authenticateWithBiometrics(NoParams());
-    // result.fold(
-    //   (failure) => emit(AuthFailure(failure.message)),
-    //   (success) {
-    //      if (success) {
-    //          emit(AuthAuthenticated());
-    //      } else {
-    //          // Podría ser cancelado por el usuario o fallo real
-    //          emit(AuthStatusKnown(isPinSet: _currentPinIsSet, /* isBiometricAvailable: ... */)); // Vuelve al estado conocido
-    //      }
-    //   }
-    // );
-    // Placeholder:
-    await Future.delayed(const Duration(seconds: 1)); // Simula carga
     emit(
-      AuthFailure("Biometría no implementada aún", isPinSet: _currentPinIsSet),
-    ); // Temporal
-    await Future.delayed(const Duration(seconds: 2));
-    emit(
-      AuthStatusKnown(isPinSet: _currentPinIsSet),
-    ); // Vuelve al estado conocido
+      AuthStatusKnown(
+        isPinSet: _currentPinIsSet,
+        isBiometricAvailable: _currentBiometricSupported,
+      ),
+    );
   }
 }

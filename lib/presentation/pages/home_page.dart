@@ -4,8 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:qr_scanner_app/presentation/bloc/auth/auth_bloc.dart';
 import 'package:qr_scanner_app/presentation/widgets/pin_bottom_sheet_content.dart';
-// Importa la página de Scanner cuando la tengas
-// import 'scanner_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -92,7 +90,6 @@ class _HomePageState extends State<HomePage> {
             );
             // El BLoC se encargará de volver a emitir AuthShowPinSheet si es necesario
           } else if (state is AuthStatusKnown &&
-              !state.isPinSet &&
               ModalRoute.of(context)?.isCurrent != true) {
             // Si el PIN se acaba de crear y volvemos a AuthStatusKnown, podemos cerrar el modal si aún está abierto
             // (Esto es un manejo extra, usualmente el pop en el submit es suficiente)
@@ -101,33 +98,22 @@ class _HomePageState extends State<HomePage> {
         },
         builder: (context, state) {
           bool isLoading = state is AuthLoading;
-          bool isPinSetup = false;
-          bool canUsePin = false;
-          bool canUseBiometrics = false; // (Si implementas biometría)
+          bool isPinSetup = state.isPinSet ?? false;
+          bool canUseBiometrics = state.isBiometricAvailable ?? false;
 
-          if (state is AuthLoading) {
-            isPinSetup = state.isPinSet;
-            // Podrías querer obtener canUseBiometrics de aquí también si AuthLoading lo tiene
-          } else if (state is AuthStatusKnown) {
-            isPinSetup = state.isPinSet;
-            canUseBiometrics = state
-                .isBiometricAvailable; // <-- ¡ASEGÚRATE QUE ESTA LÍNEA EXISTE!
-          } else if (state is AuthShowPinSheet) {
-            isPinSetup = state.isPinSet;
-            // El estado conocido previo debería determinar canUseBiometrics
-          } else if (state is AuthFailure) {
-            isPinSetup = state.isPinSet;
-            // El estado conocido previo debería determinar canUseBiometrics
-          } else if (state is AuthPinIncorrect) {
-            isPinSetup = state.isPinSet;
-            // El estado conocido previo debería determinar canUseBiometrics
+          // Determina si los botones deben estar activos
+          bool canUsePin = state is! AuthInitial && state is! AuthAuthenticated;
+          // La condición para biométrico es similar, a menos que quieras deshabilitarlo durante el PIN sheet, etc.
+          bool canActivateBiometrics =
+              state is! AuthInitial &&
+              state is! AuthAuthenticated &&
+              canUseBiometrics;
+
+          // Si el estado es autenticado, no mostramos los botones
+          if (state is AuthAuthenticated) {
+            // Este return puede que ni se vea si la navegación es inmediata
+            return const Center(child: Text("Autenticado! Redirigiendo..."));
           }
-          // Determina si el botón de PIN debe estar activo
-          // Generalmente estará activo a menos que estemos autenticados o en el estado inicial.
-          canUsePin = state is! AuthInitial && state is! AuthAuthenticated;
-          // (Puedes ajustar esta lógica si necesitas deshabilitarlo en otros casos)
-
-          // (Añade lógica similar para canUseBiometrics si es necesario)
 
           return Center(
             child: Padding(
@@ -136,15 +122,16 @@ class _HomePageState extends State<HomePage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // --- Botón Biométrico ---
                   ElevatedButton.icon(
                     icon: const Icon(Icons.fingerprint),
                     label: const Text('Iniciar con Biometría'),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 15),
                     ),
-                    // Habilita si no está cargando Y la biometría está disponible
-                    onPressed: isLoading || !canUseBiometrics
-                        ? null // Se deshabilita si canUseBiometrics es false
+                    // Habilita si NO está cargando Y canActivateBiometrics es true
+                    onPressed: isLoading || !canActivateBiometrics
+                        ? null
                         : () => context.read<AuthBloc>().add(
                             BiometricAuthRequested(),
                           ),
@@ -156,14 +143,13 @@ class _HomePageState extends State<HomePage> {
                     icon: const Icon(Icons.pin),
                     label: Text(
                       isPinSetup ? 'Ingresar con PIN' : 'Configurar PIN',
-                    ), // <-- Usará el valor correcto de isPinSetup
+                    ), // Usa isPinSetup
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 15),
                     ),
-                    // Habilita si no está cargando Y podemos usar PIN (según el estado)
                     onPressed:
                         isLoading ||
-                            !canUsePin // <-- Usará el valor correcto de canUsePin
+                            !canUsePin // Usa canUsePin
                         ? null
                         : () =>
                               context.read<AuthBloc>().add(PinAuthRequested()),
@@ -176,7 +162,7 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
           );
-        },
+        }, // Fin del builder
       ),
     );
   }

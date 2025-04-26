@@ -1,4 +1,7 @@
 import 'package:get_it/get_it.dart';
+import 'package:qr_scanner_app/data/datasources/native/biometric_native_datasource.dart';
+import 'package:qr_scanner_app/domain/usecases/auth/check_biometric_support.dart';
+import 'package:qr_scanner_app/domain/usecases/auth/authenticate_with_biometrics.dart';
 import 'package:qr_scanner_app/data/datasources/native/secure_storage_native_datasource.dart';
 import 'package:qr_scanner_app/data/repositories/auth_repository_impl.dart';
 import 'package:qr_scanner_app/domain/repositories/auth_repository.dart';
@@ -13,15 +16,17 @@ final locator = GetIt.instance;
 void setupLocator() {
   // --- PRIMERO: Dependencias más básicas (Pigeon APIs / Clientes Nativos) ---
   locator.registerLazySingleton<SecureStorageApi>(() => SecureStorageApi());
-  //locator.registerLazySingleton<BiometricApi>(() => BiometricApi());
+  locator.registerLazySingleton<BiometricApi>(() => BiometricApi());
   //locator.registerLazySingleton<QrScannerApi>(() => QrScannerApi());
 
   // --- SEGUNDO: Data Sources (Dependen de Pigeon APIs) ---
   locator.registerLazySingleton<SecureStorageNativeDataSource>(
-    // Esta función pide locator<SecureStorageApi>() - ¡Ya registrada arriba!
     () => SecureStorageNativeDataSourceImpl(
       locator<SecureStorageApi>(),
     ), // Mejor ser explícito con el tipo
+  );
+  locator.registerLazySingleton<BiometricNativeDataSource>(
+    () => BiometricNativeDataSourceImpl(locator<BiometricApi>()),
   );
   // Registra otros datasources (Biometric, QR Scanner)
 
@@ -29,7 +34,8 @@ void setupLocator() {
   locator.registerLazySingleton<AuthRepository>(
     // Esta función pide locator<SecureStorageNativeDataSource>() - ¡Ya registrada arriba!
     () => AuthRepositoryImpl(
-      nativeDataSource: locator<SecureStorageNativeDataSource>(),
+      biometricDataSource: locator<BiometricNativeDataSource>(),
+      secureStorageDataSource: locator<SecureStorageNativeDataSource>(),
     ), // Mejor ser explícito
   );
 
@@ -40,13 +46,21 @@ void setupLocator() {
   locator.registerLazySingleton(() => SavePin(locator<AuthRepository>()));
   locator.registerLazySingleton(() => VerifyPin(locator<AuthRepository>()));
   // Registra use cases de biometría
+  locator.registerLazySingleton(
+    () => CheckBiometricSupport(locator<AuthRepository>()),
+  );
+  locator.registerLazySingleton(
+    () => AuthenticateWithBiometrics(locator<AuthRepository>()),
+  );
 
   // --- QUINTO: BLoCs (Dependen de Use Cases) ---
   locator.registerSingleton<AuthBloc>(
     AuthBloc(
-      checkPinExists: locator<CheckPinExists>(), // Mejor ser explícito
+      checkPinExists: locator<CheckPinExists>(),
       savePin: locator<SavePin>(),
       verifyPin: locator<VerifyPin>(),
+      checkBiometricSupport: locator<CheckBiometricSupport>(),
+      authenticateWithBiometrics: locator<AuthenticateWithBiometrics>(),
     ),
   );
 }
