@@ -39,6 +39,11 @@ android {
     }
 }
 
+dependencies {
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+}
+
 flutter {
     source = "../.."
 }
