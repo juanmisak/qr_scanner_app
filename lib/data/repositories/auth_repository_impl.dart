@@ -111,5 +111,5 @@ class AuthRepositoryImpl implements AuthRepository {
 
 // Define un Failure específico para Biometría si quieres
 class BiometricFailure extends Failure {
-  const BiometricFailure(String message) : super(message);
+  const BiometricFailure(super.message);
 }

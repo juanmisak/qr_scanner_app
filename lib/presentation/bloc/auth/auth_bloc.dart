@@ -1,3 +1,5 @@
+// ignore_for_file: avoid_print
+
 import 'dart:async';
 import 'package:bloc/bloc.dart';
 import 'package:qr_scanner_app/core/error/failures.dart';
