@@ -59,5 +59,17 @@ abstract class SecureStorageApi {
   bool exists(String key);
 }
 
+class QrScanResult {
+  String? code;
+  String? error;
+  bool? cancelled;
+}
+
+@HostApi()
+abstract class QrScannerApi {
+  @async
+  QrScanResult scanQrCode();
+}
+
 // Constante para la clave del PIN
 const String pinStorageKey = 'user_pin';

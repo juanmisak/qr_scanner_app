@@ -128,6 +128,40 @@ data class BiometricResult (
 
   override fun hashCode(): Int = toList().hashCode()
 }
+
+/** Generated class from Pigeon that represents data sent in messages. */
+data class QrScanResult (
+  val code: String? = null,
+  val error: String? = null,
+  val cancelled: Boolean? = null
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): QrScanResult {
+      val code = pigeonVar_list[0] as String?
+      val error = pigeonVar_list[1] as String?
+      val cancelled = pigeonVar_list[2] as Boolean?
+      return QrScanResult(code, error, cancelled)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      code,
+      error,
+      cancelled,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other !is QrScanResult) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    return PigeonPigeonUtils.deepEquals(toList(), other.toList())  }
+
+  override fun hashCode(): Int = toList().hashCode()
+}
 private open class PigeonPigeonCodec : StandardMessageCodec() {
   override fun readValueOfType(type: Byte, buffer: ByteBuffer): Any? {
     return when (type) {
@@ -141,6 +175,11 @@ private open class PigeonPigeonCodec : StandardMessageCodec() {
           BiometricResult.fromList(it)
         }
       }
+      131.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          QrScanResult.fromList(it)
+        }
+      }
       else -> super.readValueOfType(type, buffer)
     }
   }
@@ -152,6 +191,10 @@ private open class PigeonPigeonCodec : StandardMessageCodec() {
       }
       is BiometricResult -> {
         stream.write(130)
+        writeValue(stream, value.toList())
+      }
+      is QrScanResult -> {
+        stream.write(131)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -297,6 +340,40 @@ interface SecureStorageApi {
             val args = message as List<Any?>
             val keyArg = args[0] as String
             api.exists(keyArg) { result: Result<Boolean> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(PigeonPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(PigeonPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+    }
+  }
+}
+/** Generated interface from Pigeon that represents a handler of messages from Flutter. */
+interface QrScannerApi {
+  fun scanQrCode(callback: (Result<QrScanResult>) -> Unit)
+
+  companion object {
+    /** The codec used by QrScannerApi. */
+    val codec: MessageCodec<Any?> by lazy {
+      PigeonPigeonCodec()
+    }
+    /** Sets up an instance of `QrScannerApi` to handle messages through the `binaryMessenger`. */
+    @JvmOverloads
+    fun setUp(binaryMessenger: BinaryMessenger, api: QrScannerApi?, messageChannelSuffix: String = "") {
+      val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.com.example.qr_scanner_app.QrScannerApi.scanQrCode$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            api.scanQrCode{ result: Result<QrScanResult> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(PigeonPigeonUtils.wrapError(error))

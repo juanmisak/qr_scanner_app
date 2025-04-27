@@ -89,6 +89,57 @@ class BiometricResult {
 ;
 }
 
+class QrScanResult {
+  QrScanResult({
+    this.code,
+    this.error,
+    this.cancelled,
+  });
+
+  String? code;
+
+  String? error;
+
+  bool? cancelled;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      code,
+      error,
+      cancelled,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static QrScanResult decode(Object result) {
+    result as List<Object?>;
+    return QrScanResult(
+      code: result[0] as String?,
+      error: result[1] as String?,
+      cancelled: result[2] as bool?,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! QrScanResult || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(encode(), other.encode());
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => Object.hashAll(_toList())
+;
+}
+
 
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
@@ -103,6 +154,9 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is BiometricResult) {
       buffer.putUint8(130);
       writeValue(buffer, value.encode());
+    }    else if (value is QrScanResult) {
+      buffer.putUint8(131);
+      writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
     }
@@ -116,6 +170,8 @@ class _PigeonCodec extends StandardMessageCodec {
         return value == null ? null : BiometricAuthStatus.values[value];
       case 130: 
         return BiometricResult.decode(readValue(buffer)!);
+      case 131: 
+        return QrScanResult.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -299,6 +355,48 @@ class SecureStorageApi {
       );
     } else {
       return (pigeonVar_replyList[0] as bool?)!;
+    }
+  }
+}
+
+class QrScannerApi {
+  /// Constructor for [QrScannerApi].  The [binaryMessenger] named argument is
+  /// available for dependency injection.  If it is left null, the default
+  /// BinaryMessenger will be used which routes to the host platform.
+  QrScannerApi({BinaryMessenger? binaryMessenger, String messageChannelSuffix = ''})
+      : pigeonVar_binaryMessenger = binaryMessenger,
+        pigeonVar_messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
+  final BinaryMessenger? pigeonVar_binaryMessenger;
+
+  static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
+
+  final String pigeonVar_messageChannelSuffix;
+
+  Future<QrScanResult> scanQrCode() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.com.example.qr_scanner_app.QrScannerApi.scanQrCode$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as QrScanResult?)!;
     }
   }
 }

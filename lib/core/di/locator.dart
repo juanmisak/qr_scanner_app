@@ -10,6 +10,15 @@ import 'package:qr_scanner_app/domain/usecases/auth/save_pin.dart';
 import 'package:qr_scanner_app/domain/usecases/auth/verify_pin.dart';
 import 'package:qr_scanner_app/pigeon/messages.dart'; // Asegúrate que esta es la importación correcta para SecureStorageApi
 import 'package:qr_scanner_app/presentation/bloc/auth/auth_bloc.dart';
+import 'package:qr_scanner_app/data/datasources/local/scan_history_local_datasource.dart';
+import 'package:qr_scanner_app/data/datasources/native/qr_scanner_native_datasource.dart';
+import 'package:qr_scanner_app/data/repositories/scan_repository_impl.dart';
+import 'package:qr_scanner_app/domain/repositories/scan_repository.dart';
+import 'package:qr_scanner_app/domain/usecases/scan/get_scan_history.dart';
+import 'package:qr_scanner_app/domain/usecases/scan/save_scan_result.dart';
+import 'package:qr_scanner_app/domain/usecases/scan/start_qr_scan.dart';
+import 'package:qr_scanner_app/presentation/bloc/history/history_bloc.dart';
+import 'package:qr_scanner_app/presentation/bloc/scanner/scanner_bloc.dart';
 
 final locator = GetIt.instance;
 
@@ -17,29 +26,38 @@ void setupLocator() {
   // --- PRIMERO: Dependencias más básicas (Pigeon APIs / Clientes Nativos) ---
   locator.registerLazySingleton<SecureStorageApi>(() => SecureStorageApi());
   locator.registerLazySingleton<BiometricApi>(() => BiometricApi());
-  //locator.registerLazySingleton<QrScannerApi>(() => QrScannerApi());
+  locator.registerLazySingleton<QrScannerApi>(() => QrScannerApi());
 
   // --- SEGUNDO: Data Sources (Dependen de Pigeon APIs) ---
   locator.registerLazySingleton<SecureStorageNativeDataSource>(
-    () => SecureStorageNativeDataSourceImpl(
-      locator<SecureStorageApi>(),
-    ), // Mejor ser explícito con el tipo
+    () => SecureStorageNativeDataSourceImpl(locator<SecureStorageApi>()),
   );
   locator.registerLazySingleton<BiometricNativeDataSource>(
     () => BiometricNativeDataSourceImpl(locator<BiometricApi>()),
   );
-  // Registra otros datasources (Biometric, QR Scanner)
+  locator.registerLazySingleton<QrScannerNativeDataSource>(
+    () => QrScannerNativeDataSourceImpl(locator<QrScannerApi>()),
+  );
+  locator.registerLazySingleton<ScanHistoryLocalDataSource>(
+    () => ScanHistoryLocalDataSourceImpl(),
+  );
 
   // --- TERCERO: Repositories (Dependen de Data Sources) ---
   locator.registerLazySingleton<AuthRepository>(
-    // Esta función pide locator<SecureStorageNativeDataSource>() - ¡Ya registrada arriba!
     () => AuthRepositoryImpl(
       biometricDataSource: locator<BiometricNativeDataSource>(),
       secureStorageDataSource: locator<SecureStorageNativeDataSource>(),
-    ), // Mejor ser explícito
+    ),
+  );
+  locator.registerLazySingleton<ScanRepository>(
+    () => ScanRepositoryImpl(
+      nativeDataSource: locator<QrScannerNativeDataSource>(),
+      localDataSource: locator<ScanHistoryLocalDataSource>(),
+    ),
   );
 
   // --- CUARTO: Use Cases (Dependen de Repositories) ---
+  // Registra cases de PIN auth
   locator.registerLazySingleton(
     () => CheckPinExists(locator<AuthRepository>()),
   );
@@ -52,6 +70,14 @@ void setupLocator() {
   locator.registerLazySingleton(
     () => AuthenticateWithBiometrics(locator<AuthRepository>()),
   );
+  // Registra use cases de Scanner
+  locator.registerLazySingleton(
+    () => GetScanHistory(locator<ScanRepository>()),
+  );
+  locator.registerLazySingleton(() => StartQrScan(locator<ScanRepository>()));
+  locator.registerLazySingleton(
+    () => SaveScanResult(locator<ScanRepository>()),
+  );
 
   // --- QUINTO: BLoCs (Dependen de Use Cases) ---
   locator.registerSingleton<AuthBloc>(
@@ -61,6 +87,15 @@ void setupLocator() {
       verifyPin: locator<VerifyPin>(),
       checkBiometricSupport: locator<CheckBiometricSupport>(),
       authenticateWithBiometrics: locator<AuthenticateWithBiometrics>(),
+    ),
+  );
+  locator.registerFactory<HistoryBloc>(
+    () => HistoryBloc(getScanHistory: locator<GetScanHistory>()),
+  );
+  locator.registerFactory<ScannerBloc>(
+    () => ScannerBloc(
+      startQrScan: locator<StartQrScan>(),
+      saveScanResult: locator<SaveScanResult>(),
     ),
   );
 }

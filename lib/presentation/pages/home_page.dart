@@ -2,7 +2,11 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:qr_scanner_app/core/di/locator.dart';
 import 'package:qr_scanner_app/presentation/bloc/auth/auth_bloc.dart';
+import 'package:qr_scanner_app/presentation/bloc/history/history_bloc.dart';
+import 'package:qr_scanner_app/presentation/bloc/scanner/scanner_bloc.dart';
+import 'package:qr_scanner_app/presentation/pages/scanner_page.dart';
 import 'package:qr_scanner_app/presentation/widgets/pin_bottom_sheet_content.dart';
 
 class HomePage extends StatefulWidget {
@@ -72,8 +76,19 @@ class _HomePageState extends State<HomePage> {
               ),
             );
             // Navega a la siguiente pantalla (ej. ScannerPage)
-            // Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => ScannerPage()));
-            //print("Navegar a la pantalla principal de la app (Scanner)");
+            // En HomePage -> listener -> if (state is AuthAuthenticated)
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (_) => MultiBlocProvider(
+                  // Necesitas proveer los BLoCs a ScannerPage
+                  providers: [
+                    BlocProvider(create: (_) => locator<HistoryBloc>()),
+                    BlocProvider(create: (_) => locator<ScannerBloc>()),
+                  ],
+                  child: const ScannerPage(),
+                ),
+              ),
+            );
           } else if (state is AuthFailure) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
