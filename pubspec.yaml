@@ -44,6 +44,7 @@ dependencies:
   path: ^1.8.3
   permission_handler: ^11.1.0 # Para permiso de cámara desde Flutter
   intl: ^0.20.2
+  const_date_time: ^1.2.1
 
 dev_dependencies:
   flutter_test:

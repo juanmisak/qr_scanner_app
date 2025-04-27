@@ -1,11 +1,9 @@
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
-// Importa Failure base
 import 'package:qr_scanner_app/core/usecase/usecase.dart';
 import 'package:qr_scanner_app/domain/entities/scan_result.dart' as domain;
 import 'package:qr_scanner_app/domain/usecases/scan/save_scan_result.dart';
 import 'package:qr_scanner_app/domain/usecases/scan/start_qr_scan.dart';
-// Importa QrScanResult de Pigeon
 
 part '../scanner/scanner_event.dart';
 part '../scanner/scanner_state.dart';
@@ -24,7 +22,7 @@ class ScannerBloc extends Bloc<ScannerEvent, ScannerState> {
     ScanRequested event,
     Emitter<ScannerState> emit,
   ) async {
-    emit(ScannerLoading()); // O ScanningInProgress()
+    emit(ScannerLoading());
     final failureOrScanResult = await startQrScan(NoParams());
 
     await failureOrScanResult.fold(
