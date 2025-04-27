@@ -20,17 +20,34 @@ class _ScannerPageState extends State<ScannerPage> {
     super.initState();
     // Carga el historial inicial
     context.read<HistoryBloc>().add(LoadHistory());
+
+    // 2. Intenta iniciar el escaneo automáticamente después de que el widget se construya
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Asegura que el widget todavía está montado antes de interactuar con el context
+      if (mounted) {
+        _initiateAutoScan(context);
+      }
+    });
   }
 
-  Future<void> _requestCameraPermissionAndScan() async {
+  // Función para manejar la solicitud de permiso e iniciar el escaneo
+  Future<void> _triggerScan(BuildContext buildContext) async {
+    // Usa el BuildContext pasado para seguridad
+    final scannerBloc = buildContext.read<ScannerBloc>();
+    final scaffoldMessenger = ScaffoldMessenger.of(
+      buildContext,
+    ); // Captura el ScaffoldMessenger
+
     final status = await Permission.camera.request();
+
+    // Vuelve a verificar 'mounted' después de una operación async
+    if (!mounted) return;
+
     if (status.isGranted) {
-      // Permiso concedido, inicia el escaneo
-      context.read<ScannerBloc>().add(ScanRequested());
+      scannerBloc.add(ScanRequested());
     } else if (status.isPermanentlyDenied) {
-      // El usuario negó permanentemente, muestra diálogo para ir a ajustes
       await showDialog(
-        context: context,
+        context: context, // Usa el context del State
         builder: (context) => AlertDialog(
           title: const Text("Permiso Requerido"),
           content: const Text(
@@ -52,11 +69,25 @@ class _ScannerPageState extends State<ScannerPage> {
         ),
       );
     } else {
-      // Permiso denegado pero no permanentemente
-      ScaffoldMessenger.of(context).showSnackBar(
+      // Muestra el SnackBar usando el ScaffoldMessenger capturado
+      scaffoldMessenger.showSnackBar(
         const SnackBar(content: Text("Permiso de cámara denegado.")),
       );
     }
+  }
+
+  // Función llamada desde initState para el escaneo automático
+  Future<void> _initiateAutoScan(BuildContext buildContext) async {
+    print("Iniciando escaneo automático...");
+    // Llama a la misma lógica que usaría el botón
+    await _triggerScan(buildContext);
+  }
+
+  // Función para el FloatingActionButton (escaneo manual)
+  Future<void> _manualScanRequest() async {
+    print("Iniciando escaneo manual...");
+    // Llama a la misma lógica
+    await _triggerScan(context); // 'context' es seguro de usar aquí
   }
 
   @override
@@ -158,15 +189,14 @@ class _ScannerPageState extends State<ScannerPage> {
           },
         ),
       ),
+      // Mantenemos el FAB para re-escaneos manuales
       floatingActionButton: BlocBuilder<ScannerBloc, ScannerState>(
-        // Deshabilita el FAB mientras escanea/guarda
         builder: (context, scanState) {
           final isScanningOrSaving =
               scanState is ScannerLoading || scanState is ScanSaveInProgress;
           return FloatingActionButton(
-            onPressed: isScanningOrSaving
-                ? null
-                : _requestCameraPermissionAndScan,
+            // Llama a la función de escaneo manual
+            onPressed: isScanningOrSaving ? null : _manualScanRequest,
             tooltip: 'Escanear QR',
             backgroundColor: isScanningOrSaving
                 ? Colors.grey
