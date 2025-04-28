@@ -1,8 +1,23 @@
 plugins {
     id("com.android.application")
     id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+import java.util.Properties
+import java.io.FileInputStream
+
+val keyPropertiesFile = rootProject.file("key.properties")
+val keyProperties = Properties()
+if (keyPropertiesFile.exists() && keyPropertiesFile.isFile) {
+    try {
+        keyProperties.load(FileInputStream(keyPropertiesFile))
+        println("Loaded key properties from: ${keyPropertiesFile.absolutePath}")
+    } catch (e: Exception) {
+         println("Error loading key.properties: ${e.message}")
+    }
+} else {
+    println("'key.properties' not found at ${keyPropertiesFile.absolutePath}. Release builds may not be signed.")
 }
 
 android {
@@ -30,11 +45,25 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            if (keyProperties.containsKey("storeFile")) {
+                storeFile = file(keyProperties["storeFile"] as String)
+                storePassword = keyProperties["storePassword"] as String?
+                keyAlias = keyProperties["keyAlias"] as String?
+                keyPassword = keyProperties["keyPassword"] as String?
+            } else {
+                println("Signing config for release not found in key.properties.")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 }

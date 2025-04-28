@@ -1,22 +1,8 @@
-# qr_scanner_app
+# qr_scanner_app🤳🏼
 
 Aplicación Flutter para Android que escanee códigos QR usando la cámara nativa de Android (Kotlin + CameraX) y que implemente autenticación biométrica nativa (Kotlin + BiometricPrompt), todo dentro de una arquitectura limpia y con comunicación eficiente entre Flutter y Kotlin usando Pigeon.
 
-Arquitectura Propuesta (Clean Architecture):
-
-      
-+-----------------------+      +--------------------+      +-------------------------+      +--------------------------+
-|Presentation (Flutter) | ---> |   Domain (Dart)    | ---> |     Data (Dart/Kotlin)  | ---> |   Native (Kotlin/Android)|
-|-----------------------|      |--------------------|      |-------------------------|      |--------------------------|
-| - Widgets (Screens)   |      | - Entities         |      | - Repositories Impl     |      | - BiometricPrompt API    |
-| - BLoCs / Cubits      |      | - Use Cases        |      | - Data Sources (Local/  |      | - CameraX API / ML Kit   |
-| - Navigation          |      | - Repository Ports |      |   Remote/Native)        |      | - SQLite                 |
-|                       |      |   (Interfaces)     |      |   - Pigeon Clients      |      | - Pigeon Host Impl       |
-|                       |      |                    |      |   - sqflite / secure_   |      |                          |
-|                       |      |                    |      |     storage             |      |                          |
-+-----------------------+      +--------------------+      +-------------------------+      +--------------------------+
-
-## Flujo principal de Escaneo y guardado del historial de QRs
+## 🏗️ Flujo principal de Escaneo y guardado del historial de QRs
 
 1. Flutter (ScannerPage): Usuario presiona el FAB -> Se pide permiso -> Si se concede -> Se dispara ScanRequested en ScannerBloc.
 
@@ -57,3 +43,18 @@ Arquitectura Propuesta (Clean Architecture):
 20. Flutter (HistoryBloc): Recibe LoadHistory -> Emite HistoryLoading -> Llama a GetScanHistory -> Recibe la lista actualizada -> Emite HistoryLoaded(scans).
 
 21. Flutter (ScannerPage.BlocBuilder): Detecta HistoryLoaded y reconstruye la ListView con el nuevo ítem.
+
+## 🚀 Run project
+        git clone https://github.com/juanmisak/qr_scanner_app.git
+        cd qr_scanner_app
+        flutter run
+
+## 🧪 Pruebas unitarias
+### Blocs
+    flutter test test/presentation/bloc/auth/auth_bloc_test.dart
+### Pruebas de Use Cases
+    flutter test test/domain/usecases/auth/check_pin_exists_test.dart
+### Pruebas de DataSources Nativos:
+    flutter test test/data/datasources/native/secure_storage_native_datasource_test.dart
+    flutter test test/data/datasources/native/biometric_native_datasource_test.dart
+    flutter test test/data/datasources/native/qr_scanner_native_datasource_test.dart
