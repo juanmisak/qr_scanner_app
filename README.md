@@ -2,6 +2,8 @@
 
 Aplicación Flutter para Android que escanee códigos QR usando la cámara nativa de Android (Kotlin + CameraX) y que implemente autenticación biométrica nativa (Kotlin + BiometricPrompt), todo dentro de una arquitectura limpia y con comunicación eficiente entre Flutter y Kotlin usando Pigeon.
 
+![Descargar desde Google Play](https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fwww.ayto-arroyomolinos.org%2Farchivos%2Flogos%2Fgoogle-play.png%2Fimage&f=1&nofb=1&ipt=ce24cc04333965083516497ec4a1ccae8f94c42b2a3937a0c507e97fec0127c0)
+
 ## 🏗️ Flujo principal de Escaneo y guardado del historial de QRs
 
 1. Flutter (ScannerPage): Usuario presiona el FAB -> Se pide permiso -> Si se concede -> Se dispara ScanRequested en ScannerBloc.
